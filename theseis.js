@@ -37,9 +37,34 @@
     return new Date(d.getFullYear(), d.getMonth(), d.getDate());
   }
 
-  function isExpired(deadline) {
-    var d = parseDMY(deadline);
-    return d ? startOfDay(d) < todayCy() : false;
+  function addMonths(d, months) {
+    var y = d.getFullYear();
+    var m = d.getMonth() + months;
+    var last = new Date(y, m + 1, 0).getDate();
+    var day = Math.min(d.getDate(), last);
+    return new Date(y, m, day);
+  }
+
+  function expiryRef(p) {
+    return parseDMY(p.deadline) || parseDMY(p.exam_date) || parseDMY(p.published);
+  }
+
+  function isExpiredPost(p) {
+    var today = todayCy();
+    var dd = parseDMY(p.deadline);
+    var ed = parseDMY(p.exam_date);
+    return !!(dd && startOfDay(dd) < today) || !!(ed && startOfDay(ed) < today);
+  }
+
+  function isTooOldExpired(p) {
+    if (!isExpiredPost(p)) return false;
+    var ref = expiryRef(p);
+    if (!ref) return false;
+    return startOfDay(ref) < startOfDay(addMonths(todayCy(), -6));
+  }
+
+  function sectionOf(p) {
+    return isExpiredPost(p) ? "expired" : "open";
   }
 
   function iconSearch() {
@@ -81,18 +106,14 @@
     var tag = p.tag || "ACTIVE";
     var tagClass = "sgr-th-tag sgr-th-tag--" + String(tag).toLowerCase();
     var exam = p.exam_date ? ("Εξέταση " + esc(p.exam_date)) : "Αναμένεται";
-    var expired = isExpired(p.deadline);
-    var deadlineTxt = p.deadline
-      ? ((expired ? "έληξε " : "έως ") + esc(p.deadline))
-      : "—";
+    var expired = isExpiredPost(p);
+    var deadlineTxt = p.deadline && parseDMY(p.deadline)
+      ? ((expired && parseDMY(p.deadline) && startOfDay(parseDMY(p.deadline)) < todayCy() ? "έληξε " : "έως ") + esc(p.deadline))
+      : (p.deadline && p.deadline !== "Υπό επιβεβαίωση" ? esc(p.deadline) : "—");
     var pos = positionsLabel(p.positions);
-    var hasDetail = !!(p.gazette || p.title);
-    var detail = "";
-    if (p.gazette) {
-      detail = '<p class="sgr-th-detail">' + esc(p.gazette) + "</p>";
-    }
+    var detail = p.gazette ? '<p class="sgr-th-detail">' + esc(p.gazette) + "</p>" : "";
     return (
-      '<li class="sgr-th-row" data-id="' + esc(p.id) + '">' +
+      '<li class="sgr-th-row" data-id="' + esc(p.id) + '" data-status="' + (expired ? "expired" : "open") + '">' +
         '<div class="sgr-th-item">' +
           '<div class="sgr-th-main">' +
             '<h3 class="sgr-th-title" title="' + esc(p.title) + '">' +
@@ -107,10 +128,10 @@
             "</div>" +
           "</div>" +
           '<div class="sgr-th-side">' +
-            '<span class="sgr-th-deadline sgr-th-date' + (expired ? " is-expired" : "") + '">' + deadlineTxt + "</span>" +
+            '<span class="sgr-th-deadline sgr-th-date' + (expired && parseDMY(p.deadline) && startOfDay(parseDMY(p.deadline)) < todayCy() ? " is-expired" : "") + '">' + deadlineTxt + "</span>" +
             '<span class="sgr-th-exam sgr-th-date">' + exam + "</span>" +
             '<div class="sgr-th-actions">' +
-              (hasDetail && p.gazette
+              (p.gazette
                 ? '<button class="sgr-th-more" type="button" aria-expanded="false" aria-label="Περισσότερα στοιχεία">' + iconMore() + "</button>"
                 : "") +
               '<a class="sgr-th-link" href="' + esc(p.link) + '" target="_blank" rel="noopener noreferrer" aria-label="Επίσημη προκήρυξη" title="Επίσημη προκήρυξη">' +
@@ -124,36 +145,46 @@
     );
   }
 
-  function comparePosts(a, b, sort) {
-    function deadlineVal(p) {
-      var d = parseDMY(p.deadline);
-      return d ? d.getTime() : 8640000000000000;
-    }
-    function publishedVal(p) {
-      var d = parseDMY(p.published);
-      return d ? d.getTime() : 0;
-    }
-    if (sort === "published") {
-      return publishedVal(b) - publishedVal(a) || a.organisation.localeCompare(b.organisation, "el");
-    }
+  function deadlineVal(p) {
+    var d = parseDMY(p.deadline);
+    return d ? d.getTime() : 8640000000000000;
+  }
+
+  function publishedVal(p) {
+    var d = parseDMY(p.published);
+    return d ? d.getTime() : 0;
+  }
+
+  function expiryVal(p) {
+    var d = expiryRef(p);
+    return d ? d.getTime() : 0;
+  }
+
+  function compareInSection(a, b, sort, section) {
     if (sort === "organisation") {
       return a.organisation.localeCompare(b.organisation, "el") || a.title.localeCompare(b.title, "el");
     }
     if (sort === "deadline") {
+      if (section === "expired") {
+        return expiryVal(b) - expiryVal(a) || a.organisation.localeCompare(b.organisation, "el");
+      }
       return deadlineVal(a) - deadlineVal(b) || a.organisation.localeCompare(b.organisation, "el");
     }
-    var ta = Object.prototype.hasOwnProperty.call(TAG_ORDER, a.tag) ? TAG_ORDER[a.tag] : 9;
-    var tb = Object.prototype.hasOwnProperty.call(TAG_ORDER, b.tag) ? TAG_ORDER[b.tag] : 9;
-    return ta - tb ||
-      deadlineVal(a) - deadlineVal(b) ||
-      a.organisation.localeCompare(b.organisation, "el");
+    if (sort === "tag") {
+      var ta = Object.prototype.hasOwnProperty.call(TAG_ORDER, a.tag) ? TAG_ORDER[a.tag] : 9;
+      var tb = Object.prototype.hasOwnProperty.call(TAG_ORDER, b.tag) ? TAG_ORDER[b.tag] : 9;
+      if (ta !== tb) return ta - tb;
+    }
+    if (section === "expired") {
+      return expiryVal(b) - expiryVal(a) || a.organisation.localeCompare(b.organisation, "el");
+    }
+    return publishedVal(b) - publishedVal(a) || a.organisation.localeCompare(b.organisation, "el");
   }
 
   function matches(p, f) {
     if (f.category && p.category !== f.category) return false;
     if (f.organisation && p.organisation !== f.organisation) return false;
     if (f.tag && p.tag !== f.tag) return false;
-    if (f.openOnly && isExpired(p.deadline)) return false;
     if (f.q) {
       var hay = [p.title, p.organisation, p.scale, p.category, p.gazette, p.positions]
         .join(" ").toLowerCase();
@@ -168,10 +199,12 @@
       return '<option value="' + esc(o) + '">' + esc(o) + "</option>";
     }).join("");
     var updated = data.generated_at_display || "";
+    var nOpen = data.count_open != null ? data.count_open : "";
+    var nExp = data.count_expired != null ? data.count_expired : "";
     return (
       '<div class="sgr-th-bar">' +
         '<p class="sgr-th-meta-line">' +
-          '<span class="sgr-th-count" aria-live="polite"><strong>' + esc(String(data.count)) + "</strong> ανοιχτές θέσεις</span>" +
+          '<span class="sgr-th-count" aria-live="polite"><strong>' + esc(String(data.count)) + "</strong> θέσεις</span>" +
           (updated ? '<span>Ενημέρωση: <span class="sgr-th-date">' + esc(updated) + "</span></span>" : "") +
         "</p>" +
         '<form class="sgr-th-controls" action="#" role="search">' +
@@ -208,22 +241,34 @@
               "</select>" +
             "</div>" +
             '<div class="sgr-th-field">' +
+              '<label class="sgr-th-sr" for="sgr-th-status">Προθεσμία</label>' +
+              '<select id="sgr-th-status" aria-label="Προθεσμία">' +
+                '<option value="">Όλες</option>' +
+                '<option value="open">Ανοιχτές</option>' +
+                '<option value="expired">Έληξαν</option>' +
+              "</select>" +
+            "</div>" +
+            '<div class="sgr-th-field">' +
               '<label class="sgr-th-sr" for="sgr-th-sort">Ταξινόμηση</label>' +
               '<select id="sgr-th-sort" aria-label="Ταξινόμηση">' +
-                '<option value="tag">Νέες πρώτα</option>' +
+                '<option value="published">Νεότερες πρώτα</option>' +
                 '<option value="deadline">Προθεσμία</option>' +
-                '<option value="published">Δημοσίευση</option>' +
+                '<option value="tag">Νέες πρώτα</option>' +
                 '<option value="organisation">Οργανισμός</option>' +
               "</select>" +
             "</div>" +
-            '<label class="sgr-th-check">' +
-              '<input id="sgr-th-open" type="checkbox">' +
-              "Ανοιχτές προθεσμίες" +
-            "</label>" +
           "</div>" +
         "</form>" +
       "</div>" +
-      '<ul class="sgr-th-list"></ul>'
+      '<p class="sgr-th-empty" hidden>Δεν βρέθηκαν θέσεις.</p>' +
+      '<section class="sgr-th-section" data-section="open">' +
+        '<h2 class="sgr-th-section__title">Ανοιχτές θέσεις <span class="sgr-th-section__count" data-count="open">(' + esc(String(nOpen)) + ")</span></h2>" +
+        '<ul class="sgr-th-list" data-list="open"></ul>' +
+      "</section>" +
+      '<section class="sgr-th-section sgr-th-section--expired" data-section="expired">' +
+        '<h2 class="sgr-th-section__title">Θέσεις που έληξαν <span class="sgr-th-section__count" data-count="expired">(' + esc(String(nExp)) + ")</span></h2>" +
+        '<ul class="sgr-th-list" data-list="expired"></ul>' +
+      "</section>"
     );
   }
 
@@ -250,10 +295,9 @@
   }
 
   function bindRows(root) {
-    var list = $(".sgr-th-list", root);
-    if (!list || list.dataset.bound) return;
-    list.dataset.bound = "1";
-    list.addEventListener("click", function (e) {
+    if (root.dataset.boundRows) return;
+    root.dataset.boundRows = "1";
+    root.addEventListener("click", function (e) {
       var btn = e.target.closest(".sgr-th-more");
       if (!btn) return;
       e.preventDefault();
@@ -266,29 +310,46 @@
   }
 
   function renderList(root, data) {
-    var list = $(".sgr-th-list", root);
-    var countEl = $(".sgr-th-count", root);
     var f = {
       q: ($("#sgr-th-q", root).value || "").trim().toLowerCase(),
       category: $("#sgr-th-cat", root).value,
       organisation: $("#sgr-th-org", root).value,
       tag: $("#sgr-th-tag", root).value,
-      openOnly: $("#sgr-th-open", root).checked,
-      sort: $("#sgr-th-sort", root).value || "tag"
+      section: $("#sgr-th-status", root) ? $("#sgr-th-status", root).value : "",
+      sort: ($("#sgr-th-sort", root) && $("#sgr-th-sort", root).value) || "published"
     };
-    var rows = data.posts.filter(function (p) { return matches(p, f); });
-    rows.sort(function (a, b) { return comparePosts(a, b, f.sort); });
-    if (!rows.length) {
-      list.innerHTML = "";
-      list.hidden = true;
-      if (countEl) countEl.innerHTML = '<span class="sgr-th-empty">Δεν βρέθηκαν θέσεις με αυτά τα κριτήρια.</span>';
-    } else {
-      list.hidden = false;
-      list.innerHTML = rows.map(cardHTML).join("");
-      if (countEl) {
-        countEl.innerHTML = rows.length === data.posts.length
-          ? ("<strong>" + rows.length + "</strong> " + (rows.length === 1 ? "ανοιχτή θέση" : "ανοιχτές θέσεις"))
-          : ("<strong>" + rows.length + "</strong> από " + data.posts.length + " θέσεις");
+    var pool = data.posts.filter(function (p) { return !isTooOldExpired(p); });
+    var rows = pool.filter(function (p) { return matches(p, f); });
+    var open = rows.filter(function (p) { return sectionOf(p) === "open"; });
+    var exp = rows.filter(function (p) { return sectionOf(p) === "expired"; });
+    if (f.section === "open") exp = [];
+    if (f.section === "expired") open = [];
+    open.sort(function (a, b) { return compareInSection(a, b, f.sort, "open"); });
+    exp.sort(function (a, b) { return compareInSection(a, b, f.sort, "expired"); });
+
+    var listOpen = $('[data-list="open"]', root);
+    var listExp = $('[data-list="expired"]', root);
+    var secOpen = $('[data-section="open"]', root);
+    var secExp = $('[data-section="expired"]', root);
+    var emptyEl = $(".sgr-th-empty", root);
+    var countEl = $(".sgr-th-count", root);
+    var countOpenEl = $('[data-count="open"]', root);
+    var countExpEl = $('[data-count="expired"]', root);
+
+    if (listOpen) listOpen.innerHTML = open.map(cardHTML).join("");
+    if (listExp) listExp.innerHTML = exp.map(cardHTML).join("");
+    if (secOpen) secOpen.hidden = open.length === 0;
+    if (secExp) secExp.hidden = exp.length === 0;
+    if (countOpenEl) countOpenEl.textContent = "(" + open.length + ")";
+    if (countExpEl) countExpEl.textContent = "(" + exp.length + ")";
+    if (emptyEl) emptyEl.hidden = !!(open.length || exp.length);
+
+    var shown = open.length + exp.length;
+    if (countEl) {
+      if (shown === pool.length) {
+        countEl.innerHTML = "<strong>" + shown + "</strong> " + (shown === 1 ? "θέση" : "θέσεις");
+      } else {
+        countEl.innerHTML = "<strong>" + shown + "</strong> από " + pool.length + " θέσεις";
       }
     }
     sendHeight();
@@ -307,6 +368,8 @@
       generated_at: data.generated_at,
       generated_at_display: data.generated_at_display || opts.generatedAtDisplay || "",
       count: typeof data.count === "number" ? data.count : posts.length,
+      count_open: data.count_open,
+      count_expired: data.count_expired,
       posts: posts
     };
     root.innerHTML = shellHTML(view);
@@ -314,7 +377,7 @@
     if (form) {
       form.addEventListener("submit", function (e) { e.preventDefault(); });
     }
-    ["sgr-th-q", "sgr-th-cat", "sgr-th-org", "sgr-th-tag", "sgr-th-sort", "sgr-th-open"].forEach(function (id) {
+    ["sgr-th-q", "sgr-th-cat", "sgr-th-org", "sgr-th-tag", "sgr-th-status", "sgr-th-sort"].forEach(function (id) {
       var el = $("#" + id, root);
       if (!el) return;
       var ev = el.id === "sgr-th-q" ? "input" : "change";

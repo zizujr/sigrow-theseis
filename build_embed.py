@@ -17,6 +17,7 @@ Does not modify state.json and does not send email.
 from __future__ import annotations
 
 import argparse
+import calendar
 import datetime as dt
 import json
 import re
@@ -61,28 +62,51 @@ def check_text(*parts: str) -> None:
     if re.search(r"\bMONITOR\b", blob, re.I):
         raise SystemExit("ERROR: forbidden word in theseis output")
 
+def add_months(d: dt.date, months: int) -> dt.date:
+    y, m = d.year, d.month - 1 + months
+    y += m // 12
+    m = m % 12 + 1
+    return dt.date(y, m, min(d.day, calendar.monthrange(y, m)[1]))
+
+
+def expiry_ref(deadline: str, exam_date: str, published_iso: str | None):
+    """Date used for the 6-month expired cutoff: deadline, else exam, else published."""
+    return parse_d(deadline) or parse_d(exam_date) or parse_iso(published_iso)
+
+
+def is_expired(deadline: str, exam_date: str, run: dt.date) -> bool:
+    dd, ed = parse_d(deadline), parse_d(exam_date)
+    return bool((dd and dd < run) or (ed and ed < run))
+
+
 def classify(state: dict, run: dt.date) -> list[dict]:
+    """All posts in state.json, split later as open/expired.
+
+    Open: application deadline has not passed (or there is no deadline) and the
+    exam date has not passed. Expired: deadline or exam date has passed, except
+    posts whose deadline (or exam/publication if no deadline) is more than
+    6 months ago, which are omitted.
+    """
     last_run = parse_iso(state.get("last_run")) or run
     last_s = last_run.isoformat()
-    window_start = run - dt.timedelta(days=30)
+    cutoff = add_months(run, -6)
     posts = []
     for it in state.get("items") or []:
-        if it.get("removed"):
-            continue
-        ed = parse_d(it.get("exam_date") or "")
-        if ed and ed < run:
-            continue
+        exam_date = (it.get("exam_date") or "").strip()
+        deadline = it.get("deadline") or ""
         pub = parse_iso(it.get("published") or "")
-        if pub is None or pub < window_start:
-            continue
+        expired = is_expired(deadline, exam_date, run)
+        if expired:
+            ref = expiry_ref(deadline, exam_date, it.get("published"))
+            if ref and ref < cutoff:
+                continue
         if it.get("first_seen") == last_s and not it.get("baseline"):
             tag = "NEW"
         elif it.get("last_changed") == last_s and (it.get("first_seen") or last_s) < last_s:
             tag = "UPDATE"
         else:
             tag = "ACTIVE"
-        exam_date = (it.get("exam_date") or "").strip()
-        published = fmt_d(pub)
+        published = fmt_d(pub) if pub else ""
         category = normalize_category(it.get("scale_category"))
         post = {
             "id": it["id"],
@@ -91,30 +115,48 @@ def classify(state: dict, run: dt.date) -> list[dict]:
             "scale": it.get("scale") or "",
             "category": category,
             "positions": it.get("positions") or "",
-            "deadline": it.get("deadline") or "",
+            "deadline": deadline,
             "exam_status": exam_status(exam_date),
             "exam_date": exam_date,
             "tag": tag,
             "gazette": it.get("source_ref") or "",
             "link": it.get("link") or "",
             "published": published,
+            "status": "expired" if expired else "open",
         }
         check_text(*[str(v) for v in post.values()])
         if not post["link"].startswith("http"):
             raise SystemExit(f"ERROR: missing official link for {post['id']}")
         posts.append(post)
 
-    def sort_key(p):
-        d = parse_d(p.get("deadline")) or dt.date(2100, 1, 1)
-        tag_rank = {"NEW": 0, "UPDATE": 1, "ACTIVE": 2}.get(p["tag"], 9)
-        return (tag_rank, d, p["organisation"], p["title"])
+    def pub_key(p):
+        return parse_d(p.get("published")) or dt.date.min
 
-    posts.sort(key=sort_key)
-    return posts
+    def exp_key(p):
+        return expiry_ref(p.get("deadline") or "", p.get("exam_date") or "", None) or parse_d(p.get("published")) or dt.date.min
+
+    open_posts = sorted(
+        [p for p in posts if p["status"] == "open"],
+        key=lambda p: (pub_key(p), p["organisation"], p["title"]),
+        reverse=True,
+    )
+    # Most recently expired first (reverse chronological by expiry ref).
+    expired_posts = sorted(
+        [p for p in posts if p["status"] == "expired"],
+        key=lambda p: (exp_key(p), pub_key(p), p["organisation"]),
+        reverse=True,
+    )
+    # Stable organisation/title within the same date: re-sort expired by date desc
+    # then org/title asc via a two-step key (dates already desc via reverse).
+    expired_posts.sort(key=lambda p: (-exp_key(p).toordinal(), p["organisation"], p["title"]))
+    open_posts.sort(key=lambda p: (-pub_key(p).toordinal(), p["organisation"], p["title"]))
+    return open_posts + expired_posts
 
 
 def payload(posts: list[dict], run: dt.date, state: dict, now: dt.datetime) -> dict:
     generated = now.isoformat(timespec="seconds")
+    n_open = sum(1 for p in posts if p.get("status") == "open")
+    n_exp = sum(1 for p in posts if p.get("status") == "expired")
     return {
         "version": 1,
         "generated_at": generated,
@@ -122,6 +164,8 @@ def payload(posts: list[dict], run: dt.date, state: dict, now: dt.datetime) -> d
         "timezone": "Asia/Nicosia",
         "source_run": state.get("last_run") or "",
         "count": len(posts),
+        "count_open": n_open,
+        "count_expired": n_exp,
         "posts": posts,
     }
 
@@ -235,7 +279,7 @@ Live vacancy and exam listings for [sigrow.net/theseis](https://sigrow.net/these
 - Page: {host}/
 - JSON API: {host}/theseis.json
 
-Rebuilt on {fmt_d(run)} (Asia/Nicosia). Currently **{count}** posts from the last 30 days (exam date not passed).
+Rebuilt on {fmt_d(run)} (Asia/Nicosia). Currently **{count}** posts in two sections: open (deadline still open) and expired (within 6 months).
 
 ## Embed
 
@@ -296,7 +340,9 @@ def main(argv: list[str] | None = None) -> None:
     tags = {}
     for p in posts:
         tags[p["tag"]] = tags.get(p["tag"], 0) + 1
-    print(f"Wrote {len(posts)} posts to {out / 'theseis.json'}")
+    n_open = sum(1 for p in posts if p.get("status") == "open")
+    n_exp = sum(1 for p in posts if p.get("status") == "expired")
+    print(f"Wrote {len(posts)} posts to {out / 'theseis.json'} (open {n_open}, expired {n_exp})")
     print("tags:", ", ".join(f"{k} {v}" for k, v in tags.items()) or "none")
     print("files:", "theseis.json, theseis.css, theseis.js, fonts/, index.html, shortcode/embed-snippet.html, README.md")
 
