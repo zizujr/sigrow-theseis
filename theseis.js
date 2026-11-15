@@ -4,8 +4,8 @@
 
   var TAG_LABEL = { NEW: "Νέα", UPDATE: "Ενημέρωση", ACTIVE: "Ενεργή" };
   var TAG_ORDER = { NEW: 0, UPDATE: 1, ACTIVE: 2 };
+
   function $(sel, root) { return (root || document).querySelector(sel); }
-  function $all(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
 
   function esc(s) {
     return String(s == null ? "" : s)
@@ -46,8 +46,12 @@
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/></svg>';
   }
 
-  function iconArrow() {
-    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg>';
+  function iconLink() {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 5h5v5"/><path d="M20 4L10 14"/><path d="M11 5H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg>';
+  }
+
+  function iconMore() {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
   }
 
   function unique(values) {
@@ -65,34 +69,57 @@
     return a.localeCompare(b, "el");
   }
 
+  function positionsLabel(s) {
+    var t = String(s == null ? "" : s).trim();
+    if (!t) return "";
+    if (/θέσ/i.test(t)) return t;
+    if (/^\d+$/.test(t)) return t === "1" ? "1 θέση" : t + " θέσεις";
+    return t;
+  }
+
   function cardHTML(p) {
     var tag = p.tag || "ACTIVE";
     var tagClass = "sgr-th-tag sgr-th-tag--" + String(tag).toLowerCase();
-    var exam = p.exam_date ? esc(p.exam_date) : "Αναμένεται";
+    var exam = p.exam_date ? ("Εξέταση " + esc(p.exam_date)) : "Αναμένεται";
     var expired = isExpired(p.deadline);
-    var deadlineClass = "sgr-th-date" + (expired ? " is-expired" : "");
-    var deadlineTxt = esc(p.deadline || "—") + (expired ? " · έληξε" : "");
-    var gazette = p.gazette ? '<p class="sgr-th-gazette">' + esc(p.gazette) + "</p>" : "";
+    var deadlineTxt = p.deadline
+      ? ((expired ? "έληξε " : "έως ") + esc(p.deadline))
+      : "—";
+    var pos = positionsLabel(p.positions);
+    var hasDetail = !!(p.gazette || p.title);
+    var detail = "";
+    if (p.gazette) {
+      detail = '<p class="sgr-th-detail">' + esc(p.gazette) + "</p>";
+    }
     return (
-      '<li>' +
-        '<article class="sgr-th-card" data-id="' + esc(p.id) + '">' +
-          '<div class="sgr-th-card__top">' +
-            '<span class="' + tagClass + '">' + esc(TAG_LABEL[tag] || tag) + "</span>" +
-            '<span class="sgr-th-cat">' + esc(p.category || "Άλλη") + "</span>" +
+      '<li class="sgr-th-row" data-id="' + esc(p.id) + '">' +
+        '<div class="sgr-th-item">' +
+          '<div class="sgr-th-main">' +
+            '<h3 class="sgr-th-title" title="' + esc(p.title) + '">' +
+              '<a href="' + esc(p.link) + '" target="_blank" rel="noopener noreferrer">' + esc(p.title) + "</a>" +
+            "</h3>" +
+            '<div class="sgr-th-sub">' +
+              '<span class="' + tagClass + '">' + esc(TAG_LABEL[tag] || tag) + "</span>" +
+              '<p class="sgr-th-org">' + esc(p.organisation) + "</p>" +
+              '<span class="sgr-th-cat">' + esc(p.category || "Άλλη") + "</span>" +
+              (p.scale ? '<span class="sgr-th-scale">' + esc(p.scale) + "</span>" : "") +
+              (pos ? '<span class="sgr-th-pos">' + esc(pos) + "</span>" : "") +
+            "</div>" +
           "</div>" +
-          '<p class="sgr-th-org">' + esc(p.organisation) + "</p>" +
-          '<h3 class="sgr-th-title">' + esc(p.title) + "</h3>" +
-          '<dl class="sgr-th-dl">' +
-            "<div><dt>Κλίμακα</dt><dd>" + esc(p.scale) + "</dd></div>" +
-            "<div><dt>Θέσεις</dt><dd>" + esc(p.positions) + "</dd></div>" +
-            "<div><dt>Προθεσμία</dt><dd class=\"" + deadlineClass + "\">" + deadlineTxt + "</dd></div>" +
-            "<div><dt>Εξέταση</dt><dd class=\"sgr-th-date\">" + exam + "</dd></div>" +
-          "</dl>" +
-          gazette +
-          '<a class="sgr-th-btn" href="' + esc(p.link) + '" target="_blank" rel="noopener noreferrer">' +
-            "Επίσημη προκήρυξη " + iconArrow() +
-          "</a>" +
-        "</article>" +
+          '<div class="sgr-th-side">' +
+            '<span class="sgr-th-deadline sgr-th-date' + (expired ? " is-expired" : "") + '">' + deadlineTxt + "</span>" +
+            '<span class="sgr-th-exam sgr-th-date">' + exam + "</span>" +
+            '<div class="sgr-th-actions">' +
+              (hasDetail && p.gazette
+                ? '<button class="sgr-th-more" type="button" aria-expanded="false" aria-label="Περισσότερα στοιχεία">' + iconMore() + "</button>"
+                : "") +
+              '<a class="sgr-th-link" href="' + esc(p.link) + '" target="_blank" rel="noopener noreferrer" aria-label="Επίσημη προκήρυξη" title="Επίσημη προκήρυξη">' +
+                iconLink() +
+              "</a>" +
+            "</div>" +
+          "</div>" +
+        "</div>" +
+        detail +
       "</li>"
     );
   }
@@ -115,7 +142,6 @@
     if (sort === "deadline") {
       return deadlineVal(a) - deadlineVal(b) || a.organisation.localeCompare(b.organisation, "el");
     }
-    /* default: tag then deadline. Use >= 0 so NEW (rank 0) is not treated as falsy. */
     var ta = Object.prototype.hasOwnProperty.call(TAG_ORDER, a.tag) ? TAG_ORDER[a.tag] : 9;
     var tb = Object.prototype.hasOwnProperty.call(TAG_ORDER, b.tag) ? TAG_ORDER[b.tag] : 9;
     return ta - tb ||
@@ -145,8 +171,8 @@
     return (
       '<div class="sgr-th-bar">' +
         '<p class="sgr-th-meta-line">' +
-          '<span><strong>' + esc(String(data.count)) + "</strong> ανοιχτές θέσεις</span>" +
-          (updated ? '<span>Τελευταία ενημέρωση: <span class="sgr-th-date">' + esc(updated) + "</span></span>" : "") +
+          '<span class="sgr-th-count" aria-live="polite"><strong>' + esc(String(data.count)) + "</strong> ανοιχτές θέσεις</span>" +
+          (updated ? '<span>Ενημέρωση: <span class="sgr-th-date">' + esc(updated) + "</span></span>" : "") +
         "</p>" +
         '<form class="sgr-th-controls" action="#" role="search">' +
           '<div class="sgr-th-search">' +
@@ -156,9 +182,9 @@
           "</div>" +
           '<div class="sgr-th-filters">' +
             '<div class="sgr-th-field">' +
-              '<label for="sgr-th-cat">Κατηγορία</label>' +
-              '<select id="sgr-th-cat">' +
-                '<option value="">Όλες οι κατηγορίες</option>' +
+              '<label class="sgr-th-sr" for="sgr-th-cat">Κατηγορία</label>' +
+              '<select id="sgr-th-cat" aria-label="Κατηγορία">' +
+                '<option value="">Κατηγορία</option>' +
                 '<option value="Α8–Α11">Α8–Α11</option>' +
                 '<option value="Α13">Α13</option>' +
                 '<option value="Α15">Α15</option>' +
@@ -166,38 +192,37 @@
               "</select>" +
             "</div>" +
             '<div class="sgr-th-field">' +
-              '<label for="sgr-th-org">Οργανισμός</label>' +
-              '<select id="sgr-th-org">' +
-                '<option value="">Όλοι οι οργανισμοί</option>' +
+              '<label class="sgr-th-sr" for="sgr-th-org">Οργανισμός</label>' +
+              '<select id="sgr-th-org" aria-label="Οργανισμός">' +
+                '<option value="">Οργανισμός</option>' +
                 orgOpts +
               "</select>" +
             "</div>" +
             '<div class="sgr-th-field">' +
-              '<label for="sgr-th-tag">Κατάσταση</label>' +
-              '<select id="sgr-th-tag">' +
-                '<option value="">Όλες</option>' +
+              '<label class="sgr-th-sr" for="sgr-th-tag">Κατάσταση</label>' +
+              '<select id="sgr-th-tag" aria-label="Κατάσταση">' +
+                '<option value="">Κατάσταση</option>' +
                 '<option value="NEW">Νέα</option>' +
                 '<option value="UPDATE">Ενημέρωση</option>' +
                 '<option value="ACTIVE">Ενεργή</option>' +
               "</select>" +
             "</div>" +
             '<div class="sgr-th-field">' +
-              '<label for="sgr-th-sort">Ταξινόμηση</label>' +
-              '<select id="sgr-th-sort">' +
+              '<label class="sgr-th-sr" for="sgr-th-sort">Ταξινόμηση</label>' +
+              '<select id="sgr-th-sort" aria-label="Ταξινόμηση">' +
                 '<option value="tag">Νέες πρώτα</option>' +
-                '<option value="deadline">Προθεσμία (πλησιέστερη)</option>' +
-                '<option value="published">Ημερομηνία δημοσίευσης</option>' +
+                '<option value="deadline">Προθεσμία</option>' +
+                '<option value="published">Δημοσίευση</option>' +
                 '<option value="organisation">Οργανισμός</option>' +
               "</select>" +
             "</div>" +
             '<label class="sgr-th-check">' +
               '<input id="sgr-th-open" type="checkbox">' +
-              "Μόνο ανοιχτές προθεσμίες" +
+              "Ανοιχτές προθεσμίες" +
             "</label>" +
           "</div>" +
         "</form>" +
       "</div>" +
-      '<p class="sgr-th-count" aria-live="polite"></p>' +
       '<ul class="sgr-th-list"></ul>'
     );
   }
@@ -224,6 +249,22 @@
     global.addEventListener("resize", sendHeight);
   }
 
+  function bindRows(root) {
+    var list = $(".sgr-th-list", root);
+    if (!list || list.dataset.bound) return;
+    list.dataset.bound = "1";
+    list.addEventListener("click", function (e) {
+      var btn = e.target.closest(".sgr-th-more");
+      if (!btn) return;
+      e.preventDefault();
+      var row = btn.closest(".sgr-th-row");
+      if (!row) return;
+      var open = row.classList.toggle("is-open");
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+      sendHeight();
+    });
+  }
+
   function renderList(root, data) {
     var list = $(".sgr-th-list", root);
     var countEl = $(".sgr-th-count", root);
@@ -238,13 +279,17 @@
     var rows = data.posts.filter(function (p) { return matches(p, f); });
     rows.sort(function (a, b) { return comparePosts(a, b, f.sort); });
     if (!rows.length) {
-      list.innerHTML = '<li class="sgr-th-empty">Δεν βρέθηκαν θέσεις με αυτά τα κριτήρια.</li>';
-      countEl.textContent = "Εμφανίζονται 0 από " + data.posts.length + " θέσεις.";
+      list.innerHTML = "";
+      list.hidden = true;
+      if (countEl) countEl.innerHTML = '<span class="sgr-th-empty">Δεν βρέθηκαν θέσεις με αυτά τα κριτήρια.</span>';
     } else {
+      list.hidden = false;
       list.innerHTML = rows.map(cardHTML).join("");
-      countEl.textContent = rows.length === data.posts.length
-        ? (rows.length === 1 ? "Εμφανίζεται 1 θέση." : "Εμφανίζονται " + rows.length + " θέσεις.")
-        : "Εμφανίζονται " + rows.length + " από " + data.posts.length + " θέσεις.";
+      if (countEl) {
+        countEl.innerHTML = rows.length === data.posts.length
+          ? ("<strong>" + rows.length + "</strong> " + (rows.length === 1 ? "ανοιχτή θέση" : "ανοιχτές θέσεις"))
+          : ("<strong>" + rows.length + "</strong> από " + data.posts.length + " θέσεις");
+      }
     }
     sendHeight();
   }
@@ -275,6 +320,7 @@
       var ev = el.id === "sgr-th-q" ? "input" : "change";
       el.addEventListener(ev, function () { renderList(root, view); });
     });
+    bindRows(root);
     renderList(root, view);
     bindHeight();
   }
