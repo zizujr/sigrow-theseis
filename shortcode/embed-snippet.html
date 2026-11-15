@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+  <meta charset="utf-8">
+  <title>SiGrow theseis — κώδικας ενσωμάτωσης για sigrow.net/theseis/</title>
+  <style>
+    body { font-family: Roboto, "Segoe UI", sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; color: #221E1D; line-height: 1.6; }
+    h1,h2 { letter-spacing: -0.02em; }
+    code, pre { font-family: ui-monospace, "Roboto Mono", monospace; font-size: 0.9rem; }
+    pre { background: #FBF9F4; border: 1px solid #E7E0D1; border-radius: 16px; padding: 1rem 1.25rem; overflow: auto; }
+    .note { background: #EEF4FB; border-radius: 16px; padding: 1rem 1.25rem; }
+  </style>
+</head>
+<body>
+  <h1>Κώδικας ενσωμάτωσης για https://sigrow.net/theseis/</h1>
+  <p class="note">Η σελίδα έχει ήδη το σημείο τοποθέτησης <code>#theseis-embed</code> (Elementor HTML widget, κλάση <code>theseis-embed</code>). Αντικαταστήστε το κείμενο-placeholder με μία από τις δύο παραλλαγές παρακάτω. Αντικαταστήστε το <code>https://zizujr.github.io/sigrow-theseis</code> αν τα αρχεία φιλοξενούνται σε άλλη διεύθυνση.</p>
+
+  <h2>1. Iframe (με αυτόματο ύψος)</h2>
+  <p>Επικολλήστε το στο HTML widget της καρτέλας «Ανοιχτές θέσεις». Το σκριπτ αλλάζει το ύψος του iframe και αφαιρεί το στυλ του placeholder.</p>
+  <pre><code>&lt;style&gt;
+#theseis-embed.theseis-embed {
+  min-height: 0 !important;
+  padding: 0 !important;
+  display: block !important;
+  text-align: left !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+}
+&lt;/style&gt;
+&lt;iframe
+  id="sigrow-theseis"
+  src="https://zizujr.github.io/sigrow-theseis/index.html"
+  title="Ανοιχτές θέσεις και εξετάσεις οργανισμών"
+  loading="lazy"
+  referrerpolicy="no-referrer-when-downgrade"
+  style="width:100%;border:0;display:block;background:transparent;min-height:320px;"
+&gt;&lt;/iframe&gt;
+&lt;script&gt;
+(function () {
+  window.addEventListener("message", function (e) {
+    if (!e.data || e.data.type !== "sigrow-theseis-height") return;
+    var f = document.getElementById("sigrow-theseis");
+    if (f && typeof e.data.height === "number") {
+      f.style.height = Math.max(320, e.data.height) + "px";
+    }
+  });
+})();
+&lt;/script&gt;</code></pre>
+
+  <h2>2. Εγγενής απόδοση (div + script)</h2>
+  <p>Φέρνει το <code>theseis.json</code> και ζωγραφίζει τις κάρτες μέσα στο υπάρχον <code>#theseis-embed</code>, με τα typography και χρώματα του νέου design. Εναλλακτική, αν προτιμάτε να ζωγραφίζονται οι κάρτες μέσα στη σελίδα αντί για iframe. Το Elementor στη σελίδα επιτρέπει ήδη custom HTML/JS.</p>
+  <pre><code>&lt;link rel="stylesheet" href="https://zizujr.github.io/sigrow-theseis/theseis.css"&gt;
+&lt;script src="https://zizujr.github.io/sigrow-theseis/theseis.js" defer&gt;&lt;/script&gt;
+&lt;script&gt;
+document.addEventListener("DOMContentLoaded", function () {
+  if (window.SiGrowTheseis) {
+    SiGrowTheseis.mount("#theseis-embed", {
+      api: "https://zizujr.github.io/sigrow-theseis/theseis.json"
+    });
+  }
+});
+&lt;/script&gt;</code></pre>
+
+  <p>Αν το CSS/JS φορτώνει πριν υπάρξει το <code>defer</code>, μπορείτε εναλλακτικά να βάλετε το script στο τέλος του HTML widget χωρίς <code>defer</code>, αμέσως μετά το <code>theseis.js</code>.</p>
+</body>
+</html>
