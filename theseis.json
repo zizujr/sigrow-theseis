@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-11-27T18:00:25+02:00",
+  "generated_at": "2026-11-27T18:13:31+02:00",
   "generated_at_display": "27/11/2026",
   "timezone": "Asia/Nicosia",
   "source_run": "2026-11-27",
@@ -1287,6 +1287,75 @@
       "link": "https://www.mof.gov.cy/mof/gpo/gazette.nsf/D850B9B73094E06FC2258E92001C1A96/$file/5896%2016%2010%202026%20KYRIO%20MEROS%20TMIMA%20A.pdf#page=31",
       "published": "16/10/2026",
       "status": "expired"
+    }
+  ],
+  "count_exams": 4,
+  "count_exams_open": 4,
+  "count_exams_expired": 0,
+  "exams": [
+    {
+      "id": "ypan-2027-daktylografia-stenografia",
+      "title": "Ετήσιο Πρόγραμμα Κυβερνητικών Εξετάσεων Δακτυλογραφίας και Στενογραφίας 2027",
+      "organisation": "Υπηρεσία Εξετάσεων ΥΠΑΝ",
+      "scale": "Διάφορες",
+      "category": "Άλλη",
+      "exam_date": "29/03–16/04 & 07–15/10/2027",
+      "deadline": "",
+      "application_window": "03/02–17/02 & 30/08–13/09/2027",
+      "summary": "Ελληνική δακτυλογραφία και στενογραφία (εαρινή & χειμερινή περίοδος) και αγγλική δακτυλογραφία (εαρινή)",
+      "published": "27/11/2026",
+      "tag": "NEW",
+      "link": "https://enimerosi.moec.gov.cy/ypp20894",
+      "gazette": "Υπηρεσία Εξετάσεων ΥΠΑΝ, ypp20894, 27/11/2026",
+      "status": "open"
+    },
+    {
+      "id": "edy-2027-h1-a8",
+      "title": "Κυβερνητικές Εξετάσεις 2027 — Θέσεις Εισδοχής (Πανεπιστημιακό Δίπλωμα)",
+      "organisation": "Επιτροπή Δημόσιας Υπηρεσίας (Ειδική Επιτροπή)",
+      "scale": "Έως Α8",
+      "category": "Α8–Α11",
+      "exam_date": "06/02/2027",
+      "deadline": "",
+      "application_window": "Δεκέμβριος 2026",
+      "summary": "Λεκτική ικανότητα & Αφαιρετική/Ποσοτική ικανότητα",
+      "published": "24/11/2026",
+      "tag": "NEW",
+      "link": "https://www.gov.cy/anexartitoi-axiomatouchoi/diexagogi-exetaseon-gia-proslipsi-sto-dimosio-gia-theseis-eisdochis-sti-dimosia-ypiresia-pou-endechomenos-na-dimosieftoun-entos-tou-protou-examinou-tou-2027/",
+      "gazette": "Ανακοίνωση Ειδικής Επιτροπής / ΕΔΥ, 24/11/2026",
+      "status": "open"
+    },
+    {
+      "id": "edy-2027-h1-a7",
+      "title": "Κυβερνητικές Εξετάσεις 2027 — Θέσεις Εισδοχής (Απολυτήριο / Μεταλυκειακό)",
+      "organisation": "Επιτροπή Δημόσιας Υπηρεσίας (Ειδική Επιτροπή)",
+      "scale": "Έως Α7",
+      "category": "Άλλη",
+      "exam_date": "06/03/2027",
+      "deadline": "",
+      "application_window": "Δεκέμβριος 2026",
+      "summary": "Νέα μορφή: Γλωσσική Ικανότητα (πολλαπλής επιλογής)",
+      "published": "24/11/2026",
+      "tag": "NEW",
+      "link": "https://www.gov.cy/anexartitoi-axiomatouchoi/diexagogi-exetaseon-gia-proslipsi-sto-dimosio-gia-theseis-eisdochis-sti-dimosia-ypiresia-pou-endechomenos-na-dimosieftoun-entos-tou-protou-examinou-tou-2027/",
+      "gazette": "Ανακοίνωση Ειδικής Επιτροπής / ΕΔΥ, 24/11/2026",
+      "status": "open"
+    },
+    {
+      "id": "edy-2027-h1-a9-a11",
+      "title": "Κυβερνητικές Εξετάσεις 2027 — Θέσεις Εισδοχής (Πανεπιστημιακό / Επαγγελματικό Προσόν)",
+      "organisation": "Επιτροπή Δημόσιας Υπηρεσίας (Ειδική Επιτροπή)",
+      "scale": "Έως Α9 & Α11",
+      "category": "Α8–Α11",
+      "exam_date": "10/04/2027",
+      "deadline": "",
+      "application_window": "Δεκέμβριος 2026",
+      "summary": "Αφαιρετική, Κριτική & Αξιολόγηση Εργασιακών Σεναρίων",
+      "published": "24/11/2026",
+      "tag": "NEW",
+      "link": "https://www.gov.cy/anexartitoi-axiomatouchoi/diexagogi-exetaseon-gia-proslipsi-sto-dimosio-gia-theseis-eisdochis-sti-dimosia-ypiresia-pou-endechomenos-na-dimosieftoun-entos-tou-protou-examinou-tou-2027/",
+      "gazette": "Ανακοίνωση Ειδικής Επιτροπής / ΕΔΥ, 24/11/2026",
+      "status": "open"
     }
   ]
 }

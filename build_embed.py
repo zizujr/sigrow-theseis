@@ -69,6 +69,20 @@ def add_months(d: dt.date, months: int) -> dt.date:
     return dt.date(y, m, min(d.day, calendar.monthrange(y, m)[1]))
 
 
+DATE_RE = re.compile(r"\b(\d{2})/(\d{2})/(\d{4})\b")
+
+
+def all_dates(*texts: str | None) -> list[dt.date]:
+    """All dd/mm/yyyy dates found in the given strings, in appearance order."""
+    out: list[dt.date] = []
+    for t in texts:
+        for m in DATE_RE.finditer(t or ""):
+            d = parse_d(m.group(0))
+            if d:
+                out.append(d)
+    return out
+
+
 def expiry_ref(deadline: str, exam_date: str, published_iso: str | None):
     """Date used for the 6-month expired cutoff: deadline, else exam, else published."""
     return parse_d(deadline) or parse_d(exam_date) or parse_iso(published_iso)
@@ -77,6 +91,51 @@ def expiry_ref(deadline: str, exam_date: str, published_iso: str | None):
 def is_expired(deadline: str, exam_date: str, run: dt.date) -> bool:
     dd, ed = parse_d(deadline), parse_d(exam_date)
     return bool((dd and dd < run) or (ed and ed < run))
+
+
+def item_tag(it: dict, last_s: str) -> str:
+    if it.get("first_seen") == last_s and not it.get("baseline"):
+        return "NEW"
+    if it.get("last_changed") == last_s and (it.get("first_seen") or last_s) < last_s:
+        return "UPDATE"
+    return "ACTIVE"
+
+
+def exam_last_date(it: dict) -> dt.date | None:
+    """Last usable date on an exam announcement (end date, else last parsed exam/deadline date)."""
+    end = parse_d((it.get("exam_date_end") or "").strip())
+    if end:
+        return end
+    dates = all_dates(it.get("exam_date"), it.get("deadline"), it.get("application_window"))
+    return max(dates) if dates else None
+
+
+def exam_expiry_ref(it: dict):
+    """6-month cutoff: last exam date, else last deadline/window date, else published."""
+    end = parse_d((it.get("exam_date_end") or "").strip())
+    if end:
+        return end
+    exam_dates = all_dates(it.get("exam_date"))
+    if exam_dates:
+        return max(exam_dates)
+    due = all_dates(it.get("deadline"), it.get("application_window"))
+    if due:
+        return max(due)
+    return parse_iso(it.get("published"))
+
+
+def is_exam_expired(it: dict, run: dt.date) -> bool:
+    """Upcoming/active until the last exam date has passed; else until the last application date."""
+    end = parse_d((it.get("exam_date_end") or "").strip())
+    exam_dates = all_dates(it.get("exam_date"))
+    if end:
+        return end < run
+    if exam_dates:
+        return max(exam_dates) < run
+    due = all_dates(it.get("deadline"), it.get("application_window"))
+    if due:
+        return max(due) < run
+    return False
 
 
 def classify(state: dict, run: dt.date) -> list[dict]:
@@ -100,12 +159,7 @@ def classify(state: dict, run: dt.date) -> list[dict]:
             ref = expiry_ref(deadline, exam_date, it.get("published"))
             if ref and ref < cutoff:
                 continue
-        if it.get("first_seen") == last_s and not it.get("baseline"):
-            tag = "NEW"
-        elif it.get("last_changed") == last_s and (it.get("first_seen") or last_s) < last_s:
-            tag = "UPDATE"
-        else:
-            tag = "ACTIVE"
+        tag = item_tag(it, last_s)
         published = fmt_d(pub) if pub else ""
         category = normalize_category(it.get("scale_category"))
         post = {
@@ -153,10 +207,87 @@ def classify(state: dict, run: dt.date) -> list[dict]:
     return open_posts + expired_posts
 
 
+
+def classify_exams(state: dict, run: dt.date) -> list[dict]:
+    """Exam announcements (προκηρύξεις/ανακοινώσεις εξετάσεων).
+
+    Open: the exam (or, if no exam date, the application window) has not yet
+    passed. Expired items older than 6 months (by last exam date, else
+    deadline/window, else published) are omitted. Open first, then expired.
+    """
+    last_run = parse_iso(state.get("last_run")) or run
+    last_s = last_run.isoformat()
+    cutoff = add_months(run, -6)
+    exams = []
+    for it in state.get("exams") or []:
+        if it.get("removed"):
+            continue
+        exam_date = (it.get("exam_date") or "").strip()
+        deadline = (it.get("deadline") or "").strip()
+        window = (it.get("application_window") or deadline or "").strip()
+        pub = parse_iso(it.get("published") or "")
+        expired = is_exam_expired(it, run)
+        if expired:
+            ref = exam_expiry_ref(it)
+            if ref and ref < cutoff:
+                continue
+        published = fmt_d(pub) if pub else ""
+        exam = {
+            "id": it["id"],
+            "title": it.get("title") or "",
+            "organisation": it.get("organisation") or "",
+            "scale": it.get("scale") or "",
+            "category": normalize_category(it.get("scale_category")),
+            "exam_date": exam_date,
+            "deadline": deadline,
+            "application_window": window,
+            "summary": it.get("summary") or "",
+            "published": published,
+            "tag": item_tag(it, last_s),
+            "link": it.get("link") or "",
+            "gazette": it.get("source_ref") or "",
+            "status": "expired" if expired else "open",
+        }
+        check_text(*[str(v) for v in exam.values()])
+        if not exam["link"].startswith("http"):
+            raise SystemExit(f"ERROR: missing official link for exam {exam['id']}")
+        if not exam["title"] or not exam["organisation"]:
+            raise SystemExit(f"ERROR: exam {exam['id']} is missing title or organisation")
+        exams.append(exam)
+
+    def pub_key(e):
+        return parse_d(e.get("published")) or dt.date.min
+
+    def first_exam(e):
+        dates = all_dates(e.get("exam_date"))
+        return min(dates) if dates else dt.date.max
+
+    def exp_key(e):
+        return (
+            exam_expiry_ref({
+                "exam_date": e.get("exam_date") or "",
+                "deadline": e.get("deadline") or "",
+                "application_window": e.get("application_window") or "",
+                "published": None,
+            })
+            or parse_d(e.get("published"))
+            or dt.date.min
+        )
+
+    open_exams = [e for e in exams if e["status"] == "open"]
+    expired_exams = [e for e in exams if e["status"] == "expired"]
+    open_exams.sort(key=lambda e: (-pub_key(e).toordinal(), first_exam(e), e["organisation"], e["title"]))
+    expired_exams.sort(key=lambda e: (-exp_key(e).toordinal(), e["organisation"], e["title"]))
+    return open_exams + expired_exams
+
+
 def payload(posts: list[dict], run: dt.date, state: dict, now: dt.datetime) -> dict:
     generated = now.isoformat(timespec="seconds")
     n_open = sum(1 for p in posts if p.get("status") == "open")
     n_exp = sum(1 for p in posts if p.get("status") == "expired")
+    exams = classify_exams(state, run)
+    n_ex_open = sum(1 for e in exams if e.get("status") == "open")
+    n_ex_exp = sum(1 for e in exams if e.get("status") == "expired")
     return {
         "version": 1,
         "generated_at": generated,
@@ -167,6 +298,10 @@ def payload(posts: list[dict], run: dt.date, state: dict, now: dt.datetime) -> d
         "count_open": n_open,
         "count_expired": n_exp,
         "posts": posts,
+        "count_exams": len(exams),
+        "count_exams_open": n_ex_open,
+        "count_exams_expired": n_ex_exp,
+        "exams": exams,
     }
 
 
@@ -270,7 +405,7 @@ document.addEventListener("DOMContentLoaded", function () {{
 """
 
 
-def readme(host: str, count: int, run: dt.date) -> str:
+def readme(host: str, count: int, run: dt.date, exam_count: int = 0) -> str:
     host = host.rstrip("/")
     return f"""# SiGrow theseis feed
 
@@ -279,7 +414,7 @@ Live vacancy and exam listings for [sigrow.net/theseis](https://sigrow.net/these
 - Page: {host}/
 - JSON API: {host}/theseis.json
 
-Rebuilt on {fmt_d(run)} (Asia/Nicosia). Currently **{count}** posts in two sections: open (deadline still open) and expired (within 6 months).
+Rebuilt on {fmt_d(run)} (Asia/Nicosia). Currently **{count}** vacancy posts and **{exam_count}** exam announcements, each split into open (upcoming/active) and expired (within 6 months). The embed has two tabs: Θέσεις Εργασίας and Προκηρύξεις Εξετάσεων.
 
 ## Embed
 
@@ -287,7 +422,7 @@ Paste the iframe snippet from [`shortcode/embed-snippet.html`](shortcode/embed-s
 
 ## Files
 
-- `theseis.json` — versioned API (`generated_at`, `posts[]`)
+- `theseis.json` — versioned API (`generated_at`, `posts[]`, `exams[]`)
 - `index.html` — iframe page (transparent background, auto-height via `postMessage`)
 - `theseis.css`, `theseis.js`, `fonts/` — assets matched to the live sigrow.net design (self-hosted Roboto with Greek)
 """
@@ -335,14 +470,18 @@ def main(argv: list[str] | None = None) -> None:
     copy_assets(out)
     (out / "index.html").write_text(index_html(data), encoding="utf-8")
     (out / "shortcode" / "embed-snippet.html").write_text(snippet_html(args.host), encoding="utf-8")
-    (out / "README.md").write_text(readme(args.host, len(posts), run), encoding="utf-8")
+    (out / "README.md").write_text(readme(args.host, len(posts), run, data.get("count_exams") or 0), encoding="utf-8")
 
     tags = {}
     for p in posts:
         tags[p["tag"]] = tags.get(p["tag"], 0) + 1
     n_open = sum(1 for p in posts if p.get("status") == "open")
     n_exp = sum(1 for p in posts if p.get("status") == "expired")
+    n_ex = data.get("count_exams") or 0
+    n_ex_open = data.get("count_exams_open") or 0
+    n_ex_exp = data.get("count_exams_expired") or 0
     print(f"Wrote {len(posts)} posts to {out / 'theseis.json'} (open {n_open}, expired {n_exp})")
+    print(f"Wrote {n_ex} exams (open {n_ex_open}, expired {n_ex_exp})")
     print("tags:", ", ".join(f"{k} {v}" for k, v in tags.items()) or "none")
     print("files:", "theseis.json, theseis.css, theseis.js, fonts/, index.html, shortcode/embed-snippet.html, README.md")
 
