@@ -5,7 +5,7 @@ Live vacancy and exam listings for [sigrow.net/theseis](https://sigrow.net/these
 - Page: https://zizujr.github.io/sigrow-theseis/
 - JSON API: https://zizujr.github.io/sigrow-theseis/theseis.json
 
-Rebuilt on 23/11/2026 (Asia/Nicosia). Currently **78** posts in two sections: open (deadline still open) and expired (within 6 months).
+Rebuilt on 27/11/2026 (Asia/Nicosia). Currently **80** posts in two sections: open (deadline still open) and expired (within 6 months).
 
 ## Embed
 
